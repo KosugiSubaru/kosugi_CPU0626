@@ -1,0 +1,19 @@
+# Ignore extension-less files (typically build artifacts) anywhere in the repo,
+# but keep directories and files that legitimately have no extension.
+*
+!*/
+!*.*
+!Makefile
+
+# Re-ignore patterns that matched !*.* above but are still build artifacts.
+*.o
+a.out
+
+*.mi
+
+*error_logs
+*json
+
+/CPU/output
+/COMPILER/compiler/asm
+/COMPILER/compiler/bin

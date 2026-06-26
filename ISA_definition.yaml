@@ -1,0 +1,129 @@
+meta:
+  data_width: 16            # レジスタデータ幅（ビット）
+  reg_count: 16            # レジスタファイルのレジスタ数
+  instruction_length: 16    # 命令語長（ビット）
+  zero_reg: 0               # ゼロレジスタ（常に0を返す、書き込み不可）の番号
+
+  notes:
+    - 即値を拡張するときは符号拡張を行う
+    - 比較演算は符号付き整数として行う
+    - 条件分岐命令は、1クロック前の命令のフラグ結果を参照して分岐する
+    - 命令メモリは同期読み出し、データメモリは同期読み出し、同期書き込みとする
+    - データメモリの同期クロックをcpuのクロックと反転させて、シングルサイクルを実現している
+    - 後の機能検証に通らなくなるため、PCの同期クロックは反転させないこと（PCは常に次の命令を指すようにする）  
+    - 即値、ジャンプの範囲：-128～127（8ビット幅の即値の場合）、-8~7（4ビット幅の即値の場合）、-2048~2047（12ビット幅の即値の場合）
+
+
+instructions:
+  # ---- ALU ----
+  - name: addition
+    bit_field: rs2[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "0000"
+    behavior: "rd<-rs1+rs2"
+    assembly: "add rd, rs1, rs2"
+    flags:
+      Z: "rd==0"
+      N: "rd[15]"
+      V: "(rs1[15]==1) & (rs2[15]==1) & (rd[15]==0) | (rs1[15]==0) & (rs2[15]==0) & (rd[15]==1)"
+
+  - name: subtraction
+    bit_field: rs2[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "0001"
+    behavior: "rd<-rs1-rs2"
+    assembly: "sub rd, rs1, rs2"
+    flags:
+      Z: "rd==0"
+      N: "rd[15]"
+      V: "(rs1[15]==0) & (rs2[15]==1) & (rd[15]==1) | (rs1[15]==1) & (rs2[15]==0) & (rd[15]==0)"
+  
+  - name: logical and
+    bit_field: rs2[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "0010"
+    behavior: "rd<-rs1&rs2"
+    assembly: "and rd, rs1, rs2"
+
+  - name: logical or
+    bit_field: rs2[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "0011"
+    behavior: "rd<-rs1|rs2"
+    assembly: "or rd, rs1, rs2"
+
+  # ---- imm ----
+  - name: add immediate
+    bit_field: imm[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "0100"
+    behavior: "rd<-rs1+imm"
+    assembly: "addi rd, rs1, imm"
+
+  - name: add shifted immediate
+    bit_field: imm[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "0101"
+    behavior: "rd<-rs1+(imm<<4)"
+    assembly: "asi rd, rs1, (imm or Label)"
+    imm_type: "unsigned"
+ 
+  # ---- imm_load ----
+  - name: load immediate
+    bit_field: imm[15:8]+rd[7:4]+opcode[3:0]
+    opcode: "0110"
+    behavior: "rd<-imm"
+    assembly: "loadi rd, imm"
+
+  - name: load upper immediate
+    bit_field: imm[15:8]+rd[7:4]+opcode[3:0]
+    opcode: "0111"
+    behavior: "rd<-(imm<<8)"
+    assembly: "lui rd, imm"
+    imm_type: "unsigned"
+
+  # ---- Memory ----
+  - name: load
+    bit_field: imm[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "1000"
+    behavior: "rd<-Mem[rs1+imm]"
+    assembly: "load rd, rs1, imm"
+
+  - name: store
+    bit_field: rs2[15:12]+rs1[11:8]+imm[7:4]+opcode[3:0]
+    opcode: "1001"
+    behavior: "Mem[rs1+imm]<-rs2"
+    assembly: "store imm, rs1, rs2"
+
+  # ---- Branch ----
+  - name: branch less than
+    bit_field: imm[15:4]+opcode[3:0]
+    opcode: "1010"
+    behavior: "if N^V, pc<-pc+imm"
+    assembly: "blt (imm or Label)"
+
+  - name: branch less than or equal
+    bit_field: imm[15:4]+opcode[3:0]
+    opcode: "1011"
+    behavior: "if N^V|Z, pc<-pc+imm"
+    assembly: "ble (imm or Label)"
+
+  - name: branch zero
+    bit_field: imm[15:4]+opcode[3:0]
+    opcode: "1100"
+    behavior: "if Z, pc<-pc+imm"
+    assembly: "bz (imm or Label)"
+
+  # ---- Jump ----
+  - name: jump and link
+    bit_field: imm[15:8]+rd[7:4]+opcode[3:0]
+    opcode: "1101"
+    behavior: "rd<-pc+1, pc<-pc+imm"
+    assembly: "jal rd, (imm or Label)"
+
+  - name: jump and link register
+    bit_field: imm[15:12]+rs1[11:8]+rd[7:4]+opcode[3:0]
+    opcode: "1110"
+    behavior: "rd<-pc+1, pc<-rs1+imm"
+    assembly: "jalr rd, rs1, imm"
+
+  # ----- auipc ----
+  - name: add upper immediate to pc
+    bit_field: imm[15:8]+rd[7:4]+opcode[3:0]
+    opcode: "1111"
+    behavior: "rd<-pc+(imm<<8)"
+    assembly: "auipc rd, (imm or Label)"
